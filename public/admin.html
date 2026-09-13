@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>漂流瓶管理员后台</title>
+
+  <style>
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #f5f6fa;
+      color: #222;
+      font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: auto;
+    }
+
+    h1 {
+      margin-top: 0;
+    }
+
+    .card {
+      background: white;
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow:
+        0 3px 12px
+        rgba(0,0,0,0.08);
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      margin: 8px 0;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    .login-button {
+      width: 100%;
+      background: #222;
+      color: white;
+    }
+
+    .delete-button {
+      background: #e53935;
+      color: white;
+    }
+
+    .refresh-button {
+      background: #222;
+      color: white;
+    }
+
+    .logout-button {
+      background: #ddd;
+      color: #222;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .stats {
+      font-size: 20px;
+      font-weight: bold;
+      margin-bottom: 15px;
+    }
+
+    .bottle {
+      border: 1px solid #eee;
+      border-radius: 12px;
+      padding: 15px;
+      margin-bottom: 12px;
+      background: #fafafa;
+    }
+
+    .bottle-id {
+      font-family: monospace;
+      font-size: 13px;
+      color: #777;
+      word-break: break-all;
+    }
+
+    .bottle-time {
+      color: #888;
+      font-size: 13px;
+      margin-top: 5px;
+    }
+
+    .bottle-content {
+      margin: 12px 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .bottle-image {
+      max-width: 100%;
+      max-height: 400px;
+      border-radius: 10px;
+      display: block;
+      margin: 10px 0;
+    }
+
+    .reply {
+      background: white;
+      border-radius: 8px;
+      padding: 10px;
+      margin-top: 8px;
+      font-size: 14px;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 15px;
+    }
+
+    .toolbar button {
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .error {
+      color: #e53935;
+      margin-top: 10px;
+    }
+
+    .success {
+      color: #2e7d32;
+      margin-top: 10px;
+    }
+
+    @media (max-width: 600px) {
+
+      body {
+        padding: 10px;
+      }
+
+      .card {
+        padding: 15px;
+      }
+
+    }
+
+  </style>
+
+</head>
+
+
+<body>
+
+<div class="container">
+
+
+  <!-- ============================= -->
+  <!-- 登录 -->
+  <!-- ============================= -->
+
+  <div
+    id="loginPanel"
+    class="card"
+  >
+
+    <h1>🔐 管理员后台</h1>
+
+    <p>
+      漂流瓶管理系统
+    </p>
+
+    <input
+      id="password"
+      type="password"
+      placeholder="请输入管理员密码"
+      autocomplete="current-password"
+    >
+
+    <button
+      class="login-button"
+      onclick="login()"
+    >
+      登录
+    </button>
+
+    <div
+      id="loginError"
+      class="error"
+    ></div>
+
+  </div>
+
+
+  <!-- ============================= -->
+  <!-- 管理面板 -->
+  <!-- ============================= -->
+
+  <div
+    id="adminPanel"
+    class="hidden"
+  >
+
+    <div class="card">
+
+      <h1>
+        🛠️ 漂流瓶管理
+      </h1>
+
+      <div
+        id="stats"
+        class="stats"
+      >
+        正在加载……
+      </div>
+
+      <div class="toolbar">
+
+        <button
+          class="refresh-button"
+          onclick="loadBottles()"
+        >
+          🔄 刷新
+        </button>
+
+        <button
+          class="logout-button"
+          onclick="logout()"
+        >
+          退出登录
+        </button>
+
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <div id="bottleList">
+        正在加载瓶子……
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+<script>
+
+  let adminToken =
+    localStorage.getItem(
+      "drift_admin_token"
+    );
+
+
+  // =====================================
+  // 登录
+  // =====================================
+
+  async function login() {
+
+    const password =
+      document
+        .getElementById("password")
+        .value;
+
+    const error =
+      document
+        .getElementById("loginError");
+
+    error.textContent = "";
+
+    if (!password) {
+      error.textContent =
+        "请输入管理员密码";
+      return;
+    }
+
+    try {
+
+      const response =
+        await fetch(
+          "/api/admin/login",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json"
+            },
+
+            body: JSON.stringify({
+              password
+            })
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+
+        error.textContent =
+          data.error ||
+          "登录失败";
+
+        return;
+      }
+
+      adminToken =
+        data.token;
+
+      localStorage.setItem(
+        "drift_admin_token",
+        adminToken
+      );
+
+      document
+        .getElementById(
+          "loginPanel"
+        )
+        .classList
+        .add("hidden");
+
+      document
+        .getElementById(
+          "adminPanel"
+        )
+        .classList
+        .remove("hidden");
+
+      await loadBottles();
+
+    } catch (e) {
+
+      error.textContent =
+        "网络错误：" +
+        e.message;
+    }
+  }
+
+
+  // =====================================
+  // 加载所有瓶子
+  // =====================================
+
+  async function loadBottles() {
+
+    const list =
+      document
+        .getElementById(
+          "bottleList"
+        );
+
+    const stats =
+      document
+        .getElementById(
+          "stats"
+        );
+
+    list.textContent =
+      "正在加载……";
+
+    try {
+
+      const response =
+        await fetch(
+          "/api/admin/bottles",
+          {
+            headers: {
+              "Authorization":
+                "Bearer " +
+                adminToken
+            }
+          }
+        );
+
+      if (
+        response.status === 401
+      ) {
+
+        logout();
+        return;
+      }
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+
+        list.textContent =
+          data.error ||
+          "加载失败";
+
+        return;
+      }
+
+      stats.textContent =
+        "📦 当前瓶子总数：" +
+        data.count;
+
+      if (
+        !data.bottles ||
+        data.bottles.length === 0
+      ) {
+
+        list.innerHTML =
+          "<p>目前没有漂流瓶。</p>";
+
+        return;
+      }
+
+      list.innerHTML =
+        data.bottles
+          .map(
+            bottle =>
+              createBottleHTML(
+                bottle
+              )
+          )
+          .join("");
+
+    } catch (e) {
+
+      list.textContent =
+        "网络错误：" +
+        e.message;
+    }
+  }
+
+
+  // =====================================
+  // 创建瓶子 HTML
+  // =====================================
+
+  function createBottleHTML(
+    bottle
+  ) {
+
+    const id =
+      escapeHTML(
+        bottle.id || ""
+      );
+
+    const authorId =
+      escapeHTML(
+        bottle.authorId || ""
+      );
+
+    const type =
+      escapeHTML(
+        bottle.type || ""
+      );
+
+    const content =
+      bottle.content || "";
+
+    const time =
+      bottle.createdAt
+        ? new Date(
+            bottle.createdAt
+          ).toLocaleString()
+        : "未知";
+
+    let contentHTML = "";
+
+    if (
+      bottle.type === "draw"
+    ) {
+
+      contentHTML =
+        `
+        <div class="bottle-content">
+          <img
+            class="bottle-image"
+            src="${escapeAttribute(content)}"
+            alt="漂流瓶图片"
+            onerror="this.style.display='none'"
+          >
+        </div>
+        `;
+
+    } else {
+
+      contentHTML =
+        `
+        <div class="bottle-content">
+          ${escapeHTML(content)}
+        </div>
+        `;
+    }
+
+
+    let repliesHTML = "";
+
+    if (
+      bottle.replies &&
+      bottle.replies.length
+    ) {
+
+      repliesHTML =
+        `
+        <div>
+          <strong>
+            💬 回复：
+          </strong>
+
+          ${bottle.replies
+            .map(
+              reply =>
+                `
+                <div class="reply">
+                  <div>
+                    ${escapeHTML(
+                      reply.text || ""
+                    )}
+                  </div>
+
+                  <small>
+                    ${escapeHTML(
+                      reply.authorId || ""
+                    )}
+                    ·
+                    ${
+                      reply.createdAt
+                        ? new Date(
+                            reply.createdAt
+                          ).toLocaleString()
+                        : ""
+                    }
+                  </small>
+                </div>
+                `
+            )
+            .join("")}
+        </div>
+        `;
+    }
+
+
+    return `
+      <div
+        class="bottle"
+        id="bottle-${escapeAttribute(id)}"
+      >
+
+        <div class="bottle-id">
+          ID：${id}
+        </div>
+
+        <div>
+          类型：${type}
+        </div>
+
+        <div>
+          作者ID：${authorId}
+        </div>
+
+        <div class="bottle-time">
+          时间：${time}
+        </div>
+
+        ${contentHTML}
+
+        ${repliesHTML}
+
+        <div style="margin-top:15px">
+
+          <button
+            class="delete-button"
+            onclick="deleteBottle(
+              '${escapeAttribute(id)}'
+            )"
+          >
+            🗑️ 删除这个瓶子
+          </button>
+
+        </div>
+
+      </div>
+    `;
+  }
+
+
+  // =====================================
+  // 删除瓶子
+  // =====================================
+
+  async function deleteBottle(
+    id
+  ) {
+
+    const confirmed =
+      confirm(
+        "确定要删除这个漂流瓶吗？\n\n" +
+        "删除后无法通过本后台恢复。"
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+
+      const response =
+        await fetch(
+          "/api/admin/bottle/" +
+          encodeURIComponent(id),
+          {
+            method: "DELETE",
+
+            headers: {
+              "Authorization":
+                "Bearer " +
+                adminToken
+            }
+          }
+        );
+
+      if (
+        response.status === 401
+      ) {
+
+        logout();
+        return;
+      }
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+
+        alert(
+          data.error ||
+          "删除失败"
+        );
+
+        return;
+      }
+
+      alert(
+        "瓶子已删除"
+      );
+
+      await loadBottles();
+
+    } catch (e) {
+
+      alert(
+        "网络错误：" +
+        e.message
+      );
+    }
+  }
+
+
+  // =====================================
+  // 退出
+  // =====================================
+
+  function logout() {
+
+    adminToken = null;
+
+    localStorage.removeItem(
+      "drift_admin_token"
+    );
+
+    document
+      .getElementById(
+        "adminPanel"
+      )
+      .classList
+      .add("hidden");
+
+    document
+      .getElementById(
+        "loginPanel"
+      )
+      .classList
+      .remove("hidden");
+
+    document
+      .getElementById(
+        "password"
+      )
+      .value = "";
+  }
+
+
+  // =====================================
+  // HTML 转义
+  // =====================================
+
+  function escapeHTML(
+    value
+  ) {
+
+    return String(value)
+      .replace(
+        /&/g,
+        "&amp;"
+      )
+      .replace(
+        /</g,
+        "&lt;"
+      )
+      .replace(
+        />/g,
+        "&gt;"
+      )
+      .replace(
+        /"/g,
+        "&quot;"
+      )
+      .replace(
+        /'/g,
+        "&#039;"
+      );
+  }
+
+
+  function escapeAttribute(
+    value
+  ) {
+
+    return escapeHTML(value);
+  }
+
+
+  // =====================================
+  // 自动尝试恢复登录
+  // =====================================
+
+  if (adminToken) {
+
+    document
+      .getElementById(
+        "loginPanel"
+      )
+      .classList
+      .add("hidden");
+
+    document
+      .getElementById(
+        "adminPanel"
+      )
+      .classList
+      .remove("hidden");
+
+    loadBottles();
+  }
+
+</script>
+
+</body>
+
+</html>
