@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>漂流瓶</title>
+<style>
+:root{--deep:#0a1e2e;--mid:#123b4d;--mid2:#0f2f3d;--foam:#a9d9c5;--amber:#d9a05b;--amber-dim:#b9834a;--parchment:#f3ead8;--ink:#2b2016;--moon:#eaf2f0;--moon-dim:#9fb8bb}
+*{box-sizing:border-box}html,body{margin:0;padding:0;height:100%}
+body{background:radial-gradient(ellipse at 50% -10%,#1a3a4d 0%,var(--deep) 55%,#061219 100%);color:var(--moon);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;overflow:hidden;height:100vh}
+.serif{font-family:"Noto Serif SC",serif}
+#home{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}
+#home h1{font-size:42px;letter-spacing:6px;margin:0 0 8px}.tag{color:var(--moon-dim);font-size:14px;margin:0 0 44px}
+.btn-row{display:flex;gap:18px;justify-content:center;flex-wrap:wrap}.round-btn{width:128px;height:128px;border-radius:50%;border:1px solid rgba(217,160,91,.35);background:radial-gradient(circle at 35% 30%,rgba(217,160,91,.18),rgba(18,59,77,.4));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer}
+.round-btn .ico{font-size:30px}#mybottles-link{margin-top:40px;background:none;border:0;color:var(--moon-dim);font-size:13px;text-decoration:underline}
+.overlay{position:fixed;inset:0;z-index:10;background:rgba(6,15,22,.72);display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:.25s}.overlay.show{opacity:1;pointer-events:auto}.overlay.center{align-items:center}
+.sheet{width:100%;max-width:480px;background:var(--mid2);border-radius:22px 22px 0 0;padding:22px 20px 26px;max-height:88vh;overflow:auto}.close-x{position:absolute;top:14px;right:18px;background:none;border:0;color:var(--moon-dim);font-size:22px}
+.tabs{display:flex;gap:8px;margin-bottom:14px}.tab-btn{flex:1;padding:9px;border-radius:10px;border:1px solid rgba(169,217,197,.2);background:transparent;color:var(--moon-dim)}.tab-btn.active{background:rgba(217,160,91,.18);color:var(--amber)}
+textarea{width:100%;border-radius:12px;padding:12px;font-size:15px;line-height:1.6}.primary-btn{width:100%;margin-top:18px;padding:14px;border-radius:12px;border:0;background:linear-gradient(135deg,var(--amber),var(--amber-dim));font-size:16px;font-weight:600}.primary-btn:disabled{opacity:.4}
+#draw-pane canvas{width:100%;height:200px;border-radius:12px;background:#fdfaf2;touch-action:none}.draw-tools{display:flex;gap:10px;margin-top:10px}.swatch{width:24px;height:24px;border-radius:50%;border:2px solid transparent}.swatch.active{border-color:white}.small-btn{padding:7px 14px;border-radius:9px;background:transparent;color:var(--moon-dim);border:1px solid rgba(169,217,197,.25)}
+.letter-card{width:100%;max-width:420px;background:var(--parchment);color:var(--ink);border-radius:16px;padding:26px 22px;max-height:82vh;overflow:auto}.letter-content{font-size:17px;line-height:1.9;white-space:pre-wrap;word-break:break-word}.letter-content img{max-width:100%;border-radius:8px}.empty-sea{text-align:center;padding:20px;color:#7a6b52}.reply-block{margin-top:20px;border-top:1px dashed #c9bb9e;padding-top:16px}.reply-item{background:rgba(0,0,0,.04);border-radius:10px;padding:10px 12px;margin-bottom:8px}.letter-actions{display:flex;gap:10px;margin-top:14px}.letter-actions button{flex:1}.amber-btn{padding:11px;border:0;border-radius:10px;background:var(--amber)}.outline-btn{padding:11px;border:1px solid #c9bb9e;border-radius:10px;background:transparent}
+</style>
+</head>
+<body>
+<div id="home">
+<h1 class="serif">漂流瓶</h1>
+<p class="tag">写一段心事，扔进海里；或打捞一个，认识陌生人的月光</p>
+<div class="btn-row">
+<div class="round-btn" id="btn-write"><span class="ico">✍️</span>写一个瓶子</div>
+<div class="round-btn" id="btn-fish"><span class="ico">🌊</span>打捞瓶子</div>
+</div>
+<button id="mybottles-link">我扔出的瓶子 →</button>
+</div>
+
+<div class="overlay" id="overlay-write"><div class="sheet" style="position:relative">
+<button class="close-x" data-close="overlay-write">×</button><h2>写下你的漂流瓶</h2>
+<div class="tabs"><button class="tab-btn active" id="tab-text">文字</button><button class="tab-btn" id="tab-draw">画画</button></div>
+<div id="text-pane"><textarea id="text-input" placeholder="写点什么吧……不需要署名，海会替你保密。" maxlength="500"></textarea></div>
+<div id="draw-pane" style="display:none"><canvas id="draw-canvas" width="600" height="400"></canvas><div class="draw-tools">
+<div class="swatch active" style="background:#2b2016" data-color="#2b2016"></div><div class="swatch" style="background:#c0392b" data-color="#c0392b"></div><div class="swatch" style="background:#2d6a4f" data-color="#2d6a4f"></div><div class="swatch" style="background:#1d4e89" data-color="#1d4e89"></div><button class="small-btn" id="clear-canvas">清空画板</button>
+</div></div>
+<button class="primary-btn" id="btn-throw" disabled>扔进大海</button><div id="throw-status" style="text-align:center;margin-top:10px"></div>
+</div></div>
+
+<div class="overlay center" id="overlay-fish"><div class="letter-card"><div id="letter-body">正在打捞……</div></div></div>
+<div class="overlay" id="overlay-mine"><div class="sheet" style="position:relative"><button class="close-x" data-close="overlay-mine">×</button><h2>我扔出的瓶子</h2><div id="mine-list">加载中……</div></div></div>
+
+<script>
+(function(){
+const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
+const MYID_KEY='driftbottle:myid';
+let myId=null,currentFished=null,drawing=false,hasDrawn=false,drawColor='#2b2016';
+
+const API_BASE='https://driftbottle.ruiw28997.workers.dev';
+
+async function api(path,options={}){
+ const res=await fetch(API_BASE+path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});
+ let data=null;try{data=await res.json()}catch(e){}
+ if(!res.ok)throw new Error((data&&data.error)||('HTTP '+res.status));
+ return data;
+}
+function uid(){return 'u_'+crypto.randomUUID().replaceAll('-','').slice(0,24)}
+function timeAgo(t){const s=Math.max(0,Date.now()-t)/1000;if(s<60)return '刚刚';if(s<3600)return Math.floor(s/60)+'分钟前';if(s<86400)return Math.floor(s/3600)+'小时前';return Math.floor(s/86400)+'天前'}
+function escapeHtml(str){return (str||'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]))}
+function openOverlay(id){$('#'+id).classList.add('show')} function closeOverlay(id){$('#'+id).classList.remove('show')}
+$('[data-close]')?.addEventListener('click',()=>{});
+$$('[data-close]').forEach(b=>b.addEventListener('click',()=>closeOverlay(b.dataset.close)));
+
+$('#btn-write').onclick=()=>openOverlay('overlay-write');
+$('#tab-text').onclick=()=>{$('#tab-text').classList.add('active');$('#tab-draw').classList.remove('active');$('#text-pane').style.display='block';$('#draw-pane').style.display='none';updateThrowEnabled()};
+$('#tab-draw').onclick=()=>{$('#tab-draw').classList.add('active');$('#tab-text').classList.remove('active');$('#draw-pane').style.display='block';$('#text-pane').style.display='none';updateThrowEnabled()};
+function activeMode(){return $('#tab-draw').classList.contains('active')?'draw':'text'}
+function updateThrowEnabled(){$('#btn-throw').disabled=activeMode()==='text'?$('#text-input').value.trim().length===0:!hasDrawn}
+$('#text-input').addEventListener('input',updateThrowEnabled);
+
+const canvas=$('#draw-canvas'),ctx=canvas.getContext('2d');ctx.fillStyle='#fdfaf2';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.lineWidth=5;ctx.lineCap='round';
+function pos(e){const r=canvas.getBoundingClientRect(),p=e.touches?e.touches[0]:e;return{x:(p.clientX-r.left)*canvas.width/r.width,y:(p.clientY-r.top)*canvas.height/r.height}}
+function start(e){drawing=true;hasDrawn=true;const p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);updateThrowEnabled()}
+function move(e){if(!drawing)return;e.preventDefault();const p=pos(e);ctx.strokeStyle=drawColor;ctx.lineTo(p.x,p.y);ctx.stroke()}
+canvas.onmousedown=start;canvas.onmousemove=move;window.onmouseup=()=>drawing=false;canvas.addEventListener('touchstart',start,{passive:true});canvas.addEventListener('touchmove',move,{passive:false});canvas.addEventListener('touchend',()=>drawing=false);
+$$('.swatch').forEach(s=>s.onclick=()=>{$$('.swatch').forEach(x=>x.classList.remove('active'));s.classList.add('active');drawColor=s.dataset.color});
+$('#clear-canvas').onclick=()=>{ctx.fillStyle='#fdfaf2';ctx.fillRect(0,0,canvas.width,canvas.height);hasDrawn=false;updateThrowEnabled()};
+
+$('#btn-throw').onclick=async()=>{
+ const mode=activeMode(),content=mode==='text'?$('#text-input').value.trim():canvas.toDataURL('image/png');$('#btn-throw').disabled=true;$('#throw-status').textContent='正在扔向大海……';
+ try{await api('/api/throw',{method:'POST',body:JSON.stringify({authorId:myId,type:mode,content})});$('#throw-status').textContent='瓶子已经漂向远方 🌊';setTimeout(()=>{closeOverlay('overlay-write');$('#text-input').value='';$('#clear-canvas').click();$('#throw-status').textContent='';updateThrowEnabled()},900)}
+ catch(e){$('#throw-status').textContent='扔失败：'+e.message;$('#btn-throw').disabled=false}
+};
+
+$('#btn-fish').onclick=async()=>{openOverlay('overlay-fish');$('#letter-body').innerHTML='正在打捞……';try{const d=await api('/api/fish?authorId='+encodeURIComponent(myId));if(!d.bottle){$('#letter-body').innerHTML='<div class="empty-sea">大海还很安静，一个瓶子都没有。<br>要不先扔一个？</div>';currentFished=null;return}currentFished=d.bottle;renderLetter(currentFished)}catch(e){$('#letter-body').innerHTML='<div class="empty-sea">打捞失败：'+escapeHtml(e.message)+'</div>'}};
+function renderLetter(b){
+ const c=b.type==='text'?escapeHtml(b.content):'<img src="'+b.content+'" alt="漂流瓶画作">';
+ const rs=(b.replies||[]).map(r=>'<div class="reply-item">'+escapeHtml(r.text)+'<small>'+timeAgo(r.createdAt)+'</small></div>').join('');
+ $('#letter-body').innerHTML='<div style="font-size:12px;margin-bottom:14px">一个漂流了 '+timeAgo(b.createdAt)+' 的瓶子</div><div class="letter-content">'+c+'</div><div class="reply-block"><textarea id="reply-input" placeholder="回一句话给写瓶子的人……"></textarea><div class="letter-actions"><button class="outline-btn" id="btn-refish">再捞一个</button><button class="amber-btn" id="btn-reply">扔回大海（回复）</button></div>'+rs+'</div>';
+ $('#btn-refish').onclick=()=>$('#btn-fish').click();$('#btn-reply').onclick=submitReply;
+}
+async function submitReply(){const text=$('#reply-input').value.trim();if(!text||!currentFished)return;try{const d=await api('/api/reply',{method:'POST',body:JSON.stringify({authorId:myId,bottleId:currentFished.id,text})});currentFished=d.bottle;renderLetter(currentFished)}catch(e){alert('回复失败：'+e.message)}}
+
+$('#mybottles-link').onclick=async()=>{openOverlay('overlay-mine');$('#mine-list').innerHTML='加载中……';try{const d=await api('/api/mine?authorId='+encodeURIComponent(myId)),mine=d.bottles||[];if(!mine.length){$('#mine-list').innerHTML='你还没有扔出过瓶子。';return}$('#mine-list').innerHTML=mine.map(b=>'<div class="mine-item" data-id="'+escapeHtml(b.id)+'"><div>'+ (b.type==='text'?escapeHtml(b.content):'[一幅画]')+'</div><small>'+timeAgo(b.createdAt)+' · 收到 '+(b.replies||[]).length+' 条回复</small></div>').join('');$$('.mine-item').forEach(el=>el.onclick=async()=>{try{const d=await api('/api/bottle/'+encodeURIComponent(el.dataset.id));if(d.bottle){closeOverlay('overlay-mine');currentFished=d.bottle;openOverlay('overlay-fish');renderLetter(currentFished)}}catch(e){alert('加载失败：'+e.message)}})}catch(e){$('#mine-list').textContent='加载失败：'+e.message}};
+(async()=>{let x=localStorage.getItem(MYID_KEY);if(!x){x=uid();localStorage.setItem(MYID_KEY,x)}myId=x})();
+})();
+</script>
+</body>
+</html>
