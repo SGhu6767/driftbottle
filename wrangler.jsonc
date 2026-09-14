@@ -1,17 +1,8 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "driftbottle",
-  "main": "src/entry.js",
+  "pages_build_output_dir": "./public",
   "compatibility_date": "2026-09-14",
-
-  "assets": {
-    "directory": "./public/",
-    "binding": "ASSETS",
-    "run_worker_first": [
-      "/api/*"
-    ]
-  },
-
   "kv_namespaces": [
     {
       "binding": "BOTTLES",
