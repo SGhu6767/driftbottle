@@ -1,13 +1,7 @@
 // src/entry.js
-// 漂流瓶网站的后端，跑在 Cloudflare Worker 上。
-// 数据存在 Workers KV 里的一个 key（"bottles"）下面。
-// 值是一个 JSON 数组，包含所有瓶子。
+// 漂流瓶 Cloudflare Worker 后端
 
 const BOTTLES_KEY = "bottles";
-
-// ==============================
-// 基础工具
-// ==============================
 
 function nowMs() {
   return Date.now();
@@ -27,10 +21,13 @@ function genId() {
 async function loadBottles(env) {
   const raw = await env.BOTTLES.get(BOTTLES_KEY);
 
-  if (!raw) return [];
+  if (!raw) {
+    return [];
+  }
 
   try {
-    return JSON.parse(raw);
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
   } catch (e) {
     return [];
   }
@@ -43,423 +40,165 @@ async function saveBottles(env, bottles) {
   );
 }
 
-// ==============================
-// JSON 响应
-// ==============================
-
 function jsonResponse(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS"
+  return new Response(
+    JSON.stringify(data),
+    {
+      status,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type"
+      }
     }
-  });
+  );
 }
 
 function errorResponse(message, status = 400) {
   return jsonResponse(
-    { error: message },
+    {
+      ok: false,
+      error: message
+    },
     status
   );
 }
 
-// ==============================
-// Base64URL
-// ==============================
-
-function base64UrlEncode(data) {
-  const bytes =
-    typeof data === "string"
-      ? new TextEncoder().encode(data)
-      : new Uint8Array(data);
-
-  let binary = "";
-
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
+function cleanText(value, maxLength = 500) {
+  if (typeof value !== "string") {
+    return "";
   }
 
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
+  return value
+    .trim()
+    .slice(0, maxLength);
 }
 
-function base64UrlDecode(str) {
-  str = str
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
-
-  while (str.length % 4) {
-    str += "=";
-  }
-
-  const binary = atob(str);
-  const bytes = new Uint8Array(binary.length);
-
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-
-  return bytes;
-}
-
-// ==============================
-// 管理员 Token
-// ==============================
-
-async function hmacSign(text, secret) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    {
-      name: "HMAC",
-      hash: "SHA-256"
-    },
-    false,
-    ["sign"]
-  );
-
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(text)
-  );
-
-  return base64UrlEncode(signature);
-}
-
-async function createAdminToken(secret) {
-  const payload = {
-    admin: true,
-    exp: nowMs() + 12 * 60 * 60 * 1000
-  };
-
-  const payloadText = base64UrlEncode(
-    JSON.stringify(payload)
-  );
-
-  const signature = await hmacSign(
-    payloadText,
-    secret
-  );
-
-  return `${payloadText}.${signature}`;
-}
-
-async function verifyAdminToken(token, secret) {
-  try {
-    if (!token || !secret) {
-      return false;
-    }
-
-    const parts = token.split(".");
-
-    if (parts.length !== 2) {
-      return false;
-    }
-
-    const payloadText = parts[0];
-    const signature = parts[1];
-
-    const expectedSignature = await hmacSign(
-      payloadText,
-      secret
-    );
-
-    if (signature !== expectedSignature) {
-      return false;
-    }
-
-    const payloadBytes =
-      base64UrlDecode(payloadText);
-
-    const payload = JSON.parse(
-      new TextDecoder().decode(payloadBytes)
-    );
-
-    if (!payload.admin) {
-      return false;
-    }
-
-    if (!payload.exp || payload.exp < nowMs()) {
-      return false;
-    }
-
-    return true;
-
-  } catch (e) {
-    return false;
-  }
-}
-
-// ==============================
-// 管理员密码验证
-// ==============================
-
-async function verifyAdminPassword(input, password) {
-  if (!input || !password) {
+function validAuthorId(value) {
+  if (typeof value !== "string") {
     return false;
   }
 
-  const a = await hmacSign(
-    input,
-    password
-  );
-
-  const b = await hmacSign(
-    password,
-    password
-  );
-
-  return a === b;
+  return /^[a-zA-Z0-9_-]{1,100}$/.test(value);
 }
 
-// ==============================
-// 获取管理员 Token
-// ==============================
-
-function getBearerToken(request) {
-  const header =
-    request.headers.get("Authorization") || "";
-
-  if (!header.startsWith("Bearer ")) {
-    return null;
-  }
-
-  return header.slice(7).trim();
-}
-
-async function requireAdmin(request, env) {
-  const token = getBearerToken(request);
-
-  if (!token) {
+function validImageData(value) {
+  if (typeof value !== "string") {
     return false;
   }
 
-  return await verifyAdminToken(
-    token,
-    env.ADMIN_PASSWORD
-  );
+  // 只接受 PNG/JPEG/WebP Data URL
+  return /^data:image\/(png|jpeg|jpg|webp);base64,/i.test(value);
 }
-
-// ==============================
-// Worker
-// ==============================
 
 export default {
-
   async fetch(request, env) {
-
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
 
-    // CORS OPTIONS
-    if (method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Headers":
-            "Content-Type, Authorization",
-          "Access-Control-Allow-Methods":
-            "GET, POST, DELETE, OPTIONS"
-        }
-      });
-    }
-
     try {
 
-      // =====================================================
-      // 管理员登录
-      // POST /api/admin/login
-      // =====================================================
+      // ==============================
+      // CORS 预检
+      // ==============================
 
-      if (
-        path === "/api/admin/login" &&
-        method === "POST"
-      ) {
-
-        if (!env.ADMIN_PASSWORD) {
-          return errorResponse(
-            "管理员密码尚未配置",
-            500
-          );
-        }
-
-        const body = await request.json();
-
-        const password =
-          body.password || "";
-
-        const valid =
-          await verifyAdminPassword(
-            password,
-            env.ADMIN_PASSWORD
-          );
-
-        if (!valid) {
-          return errorResponse(
-            "管理员密码错误",
-            401
-          );
-        }
-
-        const token =
-          await createAdminToken(
-            env.ADMIN_PASSWORD
-          );
-
-        return jsonResponse({
-          ok: true,
-          token,
-          expiresIn: 12 * 60 * 60
+      if (method === "OPTIONS") {
+        return new Response(null, {
+          status: 204,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type"
+          }
         });
       }
 
-
-      // =====================================================
-      // 管理员：获取全部瓶子
-      // GET /api/admin/bottles
-      // =====================================================
-
-      if (
-        path === "/api/admin/bottles" &&
-        method === "GET"
-      ) {
-
-        const isAdmin =
-          await requireAdmin(
-            request,
-            env
-          );
-
-        if (!isAdmin) {
-          return errorResponse(
-            "没有管理员权限",
-            401
-          );
-        }
-
-        const bottles =
-          await loadBottles(env);
-
-        const sorted =
-          [...bottles].sort(
-            (a, b) =>
-              (b.createdAt || 0) -
-              (a.createdAt || 0)
-          );
-
-        return jsonResponse({
-          ok: true,
-          count: sorted.length,
-          bottles: sorted
-        });
-      }
-
-
-      // =====================================================
-      // 管理员：删除瓶子
-      // DELETE /api/admin/bottle/:id
-      // =====================================================
-
-      if (
-        path.startsWith("/api/admin/bottle/") &&
-        method === "DELETE"
-      ) {
-
-        const isAdmin =
-          await requireAdmin(
-            request,
-            env
-          );
-
-        if (!isAdmin) {
-          return errorResponse(
-            "没有管理员权限",
-            401
-          );
-        }
-
-        const bottleId =
-          path.slice(
-            "/api/admin/bottle/".length
-          );
-
-        if (!bottleId) {
-          return errorResponse(
-            "缺少瓶子 ID"
-          );
-        }
-
-        const bottles =
-          await loadBottles(env);
-
-        const index =
-          bottles.findIndex(
-            b => b.id === bottleId
-          );
-
-        if (index === -1) {
-          return errorResponse(
-            "瓶子不存在",
-            404
-          );
-        }
-
-        const deleted =
-          bottles[index];
-
-        bottles.splice(index, 1);
-
-        await saveBottles(
-          env,
-          bottles
-        );
-
-        return jsonResponse({
-          ok: true,
-          message: "瓶子已删除",
-          bottle: deleted,
-          count: bottles.length
-        });
-      }
-
-
-      // =====================================================
-      // 扔瓶子
-      // =====================================================
+      // ==============================
+      // 扔漂流瓶
+      // POST /api/throw
+      // ==============================
 
       if (
         path === "/api/throw" &&
         method === "POST"
       ) {
+        const body = await request.json();
 
-        const body =
-          await request.json();
+        const authorId = body.authorId;
+        const type = body.type;
+        const content = body.content;
 
-        const authorId =
-          body.authorId;
-
-        const type =
-          body.type;
-
-        const content =
-          body.content || "";
+        if (!validAuthorId(authorId)) {
+          return errorResponse(
+            "作者 ID 无效",
+            400
+          );
+        }
 
         if (
-          !authorId ||
-          (type !== "text" &&
-            type !== "draw") ||
-          !content
+          type !== "text" &&
+          type !== "draw"
         ) {
           return errorResponse(
-            "参数不完整"
+            "只允许文字或画画",
+            400
+          );
+        }
+
+        if (type === "text") {
+
+          const text = cleanText(
+            content,
+            500
+          );
+
+          if (!text) {
+            return errorResponse(
+              "漂流瓶内容不能为空",
+              400
+            );
+          }
+
+          const bottles =
+            await loadBottles(env);
+
+          const bottle = {
+            id: genId(),
+            authorId: authorId,
+            type: "text",
+            content: text,
+            createdAt: nowMs(),
+            replies: []
+          };
+
+          bottles.push(bottle);
+
+          await saveBottles(
+            env,
+            bottles
+          );
+
+          return jsonResponse({
+            ok: true,
+            bottle
+          });
+        }
+
+        // 画画
+        if (!validImageData(content)) {
+          return errorResponse(
+            "图片格式无效",
+            400
+          );
+        }
+
+        // 防止超大的 Data URL
+        if (content.length > 1500000) {
+          return errorResponse(
+            "图片太大，请缩小后再发送",
+            413
           );
         }
 
@@ -468,9 +207,9 @@ export default {
 
         const bottle = {
           id: genId(),
-          authorId,
-          type,
-          content,
+          authorId: authorId,
+          type: "draw",
+          content: content,
           createdAt: nowMs(),
           replies: []
         };
@@ -488,45 +227,43 @@ export default {
         });
       }
 
-
-      // =====================================================
-      // 打捞
-      // =====================================================
+      // ==============================
+      // 打捞漂流瓶
+      // GET /api/fish?authorId=xxx
+      // ==============================
 
       if (
         path === "/api/fish" &&
         method === "GET"
       ) {
-
         const authorId =
-          url.searchParams.get(
-            "authorId"
-          );
+          url.searchParams.get("authorId") || "";
 
         const bottles =
           await loadBottles(env);
 
-        const candidates =
-          bottles.filter(
-            b => b.authorId !== authorId
-          );
-
-        const pool =
-          candidates.length
-            ? candidates
-            : bottles;
-
-        if (!pool.length) {
+        if (!bottles.length) {
           return jsonResponse({
             bottle: null
           });
         }
 
+        let pool =
+          bottles.filter(
+            bottle =>
+              bottle.authorId !== authorId
+          );
+
+        // 如果没有别人的瓶子，
+        // 就允许打捞自己的瓶子
+        if (!pool.length) {
+          pool = bottles;
+        }
+
         const bottle =
           pool[
             Math.floor(
-              Math.random() *
-              pool.length
+              Math.random() * pool.length
             )
           ];
 
@@ -535,16 +272,15 @@ export default {
         });
       }
 
-
-      // =====================================================
-      // 回复
-      // =====================================================
+      // ==============================
+      // 回复漂流瓶
+      // POST /api/reply
+      // ==============================
 
       if (
         path === "/api/reply" &&
         method === "POST"
       ) {
-
         const body =
           await request.json();
 
@@ -555,15 +291,26 @@ export default {
           body.bottleId;
 
         const text =
-          (body.text || "").trim();
+          cleanText(
+            body.text,
+            500
+          );
 
-        if (
-          !authorId ||
-          !bottleId ||
-          !text
-        ) {
+        if (!validAuthorId(authorId)) {
           return errorResponse(
-            "参数不完整"
+            "作者 ID 无效"
+          );
+        }
+
+        if (!bottleId) {
+          return errorResponse(
+            "缺少瓶子 ID"
+          );
+        }
+
+        if (!text) {
+          return errorResponse(
+            "回复不能为空"
           );
         }
 
@@ -572,7 +319,8 @@ export default {
 
         const target =
           bottles.find(
-            b => b.id === bottleId
+            bottle =>
+              bottle.id === bottleId
           );
 
         if (!target) {
@@ -582,7 +330,7 @@ export default {
           );
         }
 
-        if (!target.replies) {
+        if (!Array.isArray(target.replies)) {
           target.replies = [];
         }
 
@@ -603,20 +351,23 @@ export default {
         });
       }
 
-
-      // =====================================================
-      // 我扔出的瓶子
-      // =====================================================
+      // ==============================
+      // 我的瓶子
+      // GET /api/mine?authorId=xxx
+      // ==============================
 
       if (
         path === "/api/mine" &&
         method === "GET"
       ) {
-
         const authorId =
-          url.searchParams.get(
-            "authorId"
+          url.searchParams.get("authorId");
+
+        if (!validAuthorId(authorId)) {
+          return errorResponse(
+            "缺少作者 ID"
           );
+        }
 
         const bottles =
           await loadBottles(env);
@@ -624,7 +375,8 @@ export default {
         const mine =
           bottles
             .filter(
-              b => b.authorId === authorId
+              bottle =>
+                bottle.authorId === authorId
             )
             .sort(
               (a, b) =>
@@ -637,21 +389,20 @@ export default {
         });
       }
 
-
-      // =====================================================
+      // ==============================
       // 查看单个瓶子
-      // =====================================================
+      // GET /api/bottle/:id
+      // ==============================
 
       if (
-        path.startsWith(
-          "/api/bottle/"
-        ) &&
+        path.startsWith("/api/bottle/") &&
         method === "GET"
       ) {
-
         const bottleId =
-          path.slice(
-            "/api/bottle/".length
+          decodeURIComponent(
+            path.slice(
+              "/api/bottle/".length
+            )
           );
 
         const bottles =
@@ -659,7 +410,8 @@ export default {
 
         const target =
           bottles.find(
-            b => b.id === bottleId
+            bottle =>
+              bottle.id === bottleId
           ) || null;
 
         return jsonResponse({
@@ -667,24 +419,34 @@ export default {
         });
       }
 
+      // ==============================
+      // 未知 API
+      // ==============================
 
-      // =====================================================
-      // 静态网页
-      // =====================================================
+      if (path.startsWith("/api/")) {
+        return errorResponse(
+          "API 不存在",
+          404
+        );
+      }
+
+      // ==============================
+      // 其他请求交给 Pages 静态资源
+      // ==============================
 
       return await env.ASSETS.fetch(
         request
       );
 
-    } catch (e) {
+    } catch (error) {
+
+      console.error(error);
 
       return errorResponse(
-        String(
-          e &&
-          e.message
-            ? e.message
-            : e
-        ),
+        error &&
+        error.message
+          ? error.message
+          : "服务器内部错误",
         500
       );
     }
