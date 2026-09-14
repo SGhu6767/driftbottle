@@ -51,7 +51,7 @@ const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
 const MYID_KEY='driftbottle:myid';
 let myId=null,currentFished=null,drawing=false,hasDrawn=false,drawColor='#2b2016';
 
-const API_BASE='https://driftbottle.ruiw28997.workers.dev';
+const API_BASE='';
 
 async function api(path,options={}){
  const res=await fetch(API_BASE+path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});
