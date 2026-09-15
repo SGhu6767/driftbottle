@@ -203,16 +203,11 @@ function getBearerToken(request) {
 }
 
 async function requireAdmin(request, env) {
-  const secret = "12345678";
+  const secret = "RUIW28997pswd";
 
   const token = getBearerToken(request);
 
   return await verifyAdminToken(
-    secret,
-    token
-  );
-}
-
     secret,
     token
   );
@@ -248,15 +243,8 @@ async function handleApi(request, env) {
         body.password || ""
       );
 
-      if (!env.ADMIN_PASSWORD) {
-        return errorResponse(
-          "管理员密码未配置",
-          500
-        );
-      }
-
       if (
-        password !== env.ADMIN_PASSWORD
+        password !== "RUIW28997pswd"
       ) {
         return errorResponse(
           "管理员密码错误",
@@ -266,7 +254,7 @@ async function handleApi(request, env) {
 
       const token =
         await createAdminToken(
-          "12345678"
+          "RUIW28997pswd"
         );
 
       return jsonResponse({
@@ -308,7 +296,8 @@ async function handleApi(request, env) {
     );
 
     return jsonResponse({
-      bottles
+      bottles,
+      count: bottles.length
     });
   }
 
